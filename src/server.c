@@ -62,7 +62,18 @@ void handle_client(int client_socket) {
 
     // Send the file content to the client
     while ((bytes_read = fread(buffer, 1, sizeof(buffer), file)) > 0) {
-        write(client_socket, buffer, bytes_read);
+        // Error handling for write
+        if (write(client_socket, buffer, bytes_read) < 0) {
+            perror("Failed to write to socket");
+            fclose(file);
+            close(client_socket);
+            return;
+        }
+    }
+
+    // Error handling for fread
+    if (ferror(file)) {
+        perror("Failed to read from file");
     }
 
     fclose(file);
