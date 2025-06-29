@@ -19,11 +19,28 @@
 #include <string.h>
 #include <unistd.h>
 #include <limits.h>
+#include <fcntl.h>
 #include <arpa/inet.h>
 #include "server.h"
 
 #define BUFFER_SIZE 1024
 #define MAX_FILE_SIZE (10 * 1024 * 1024)
+
+/* Function to determine the content type based on the file extension */
+const char* get_content_type(const char* filename) {
+    const char* dot = strrchr(filename, '.');
+    if (!dot || dot == filename) return "application/octet-stream"; // Default type
+
+    if (strcmp(dot, ".html") == 0) return "text/html";
+    if (strcmp(dot, ".txt") == 0) return "text/plain";
+    if (strcmp(dot, ".jpg") == 0 || strcmp(dot, ".jpeg") == 0) return "image/jpeg";
+    if (strcmp(dot, ".png") == 0) return "image/png";
+    if (strcmp(dot, ".gif") == 0) return "image/gif";
+    if (strcmp(dot, ".pdf") == 0) return "application/pdf";
+    /* Add more types as needed */
+
+    return "application/octet-stream";
+}
 
 void handle_client(int client_socket) {
     char buffer[BUFFER_SIZE];
@@ -72,6 +89,14 @@ void handle_client(int client_socket) {
         close(client_socket);
         return;
     }
+
+     // Determine the content type
+    const char* content_type = get_content_type(buffer);
+    
+    // Send the content type header (for HTTP-like response)
+    char header[256];
+    snprintf(header, sizeof(header), "Content-Type: %s\r\n\r\n", content_type);
+    write(client_socket, header, strlen(header));
 
     fseek(file, 0, SEEK_END);
     long file_size = ftell(file);

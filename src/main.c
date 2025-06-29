@@ -21,6 +21,8 @@
 #include <signal.h>
 #include <stdbool.h>
 #include <arpa/inet.h>
+#include <sys/select.h>
+#include <sys/resource.h>
 #include "server.h"
 
 #define DEFAULT_PORT 8080
