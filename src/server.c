@@ -34,7 +34,23 @@ void handle_client(int client_socket) {
         close(client_socket);
         return;
     }
+    
+    // Ensure the buffer is null-terminated
     buffer[bytes_read] = '\0'; // Null-terminate the string
+
+    // Check if the filename length exceeds the buffer size
+    if (bytes_read >= BUFFER_SIZE - 1) {
+        fprintf(stderr, "Filename too long: %s\n", buffer);
+        close(client_socket);
+        return;
+    }
+
+    // Sanitize the filename (basic example)
+    if (strstr(buffer, "..") != NULL) {
+        fprintf(stderr, "Invalid filename requested: %s\n", buffer);
+        close(client_socket);
+        return;
+    }
 
     // Open the requested file
     FILE *file = fopen(buffer, "r");
