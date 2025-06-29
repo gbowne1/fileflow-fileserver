@@ -20,7 +20,9 @@
 #include <unistd.h>
 #include <limits.h>
 #include <fcntl.h>
+#include <sys/file.h>
 #include <arpa/inet.h>
+
 #include "server.h"
 
 #define BUFFER_SIZE 1024
@@ -109,10 +111,18 @@ void handle_client(int client_socket) {
         return;
     }
 
+    if (flock(fileno(file), LOCK_SH) != 0) {
+        perror("Failed to lock file");
+        fclose(file);
+        close(client_socket);
+        return;
+    }
+
     // Send the file content to the client
     while ((bytes_read = fread(buffer, 1, sizeof(buffer), file)) > 0) {
         if (write(client_socket, buffer, bytes_read) < 0) {
             perror("Failed to write to socket");
+            flock(fileno(file), LOCK_UN);
             fclose(file);
             close(client_socket);
             return;
@@ -124,6 +134,7 @@ void handle_client(int client_socket) {
         perror("Failed to read from file");
     }
 
+    flock(fileno(file), LOCK_UN);
     fclose(file);
     close(client_socket);
 }
