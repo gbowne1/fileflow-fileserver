@@ -55,8 +55,9 @@ void handle_client(int client_socket) {
 
     // Open the requested file
     FILE *file = fopen(buffer, "r");
-    if (file == NULL) {
+        if (file == NULL) {
         perror("File not found");
+        fprintf(stderr, "Requested file: %s\n", resolved_path);
         close(client_socket);
         return;
     }
@@ -96,7 +97,9 @@ void handle_connections(int server_socket) {
     socklen_t client_len = sizeof(client_addr);
 
     while ((client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &client_len)) >= 0) {
-        handle_client(client_socket);
+        pthread_t thread_id;
+        pthread_create(&thread_id, NULL, handle_client, (void *)(intptr_t)client_socket);
+        pthread_detach(thread_id); // Detach the thread to allow it to clean up after itself
     }
 }
 
