@@ -50,7 +50,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    // Create socket
+    /* Create socket */
     server_socket = create_server_socket(PORT);
     if (server_socket < 0) {
         exit(EXIT_FAILURE);
