@@ -18,12 +18,24 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
+#include <stdbool.h>
 #include <arpa/inet.h>
 #include "server.h"
 
 #define PORT 8080
 
+volatile sig_atomic_t keep_running = true;
+
+void handle_signal(int signal) {
+    keep_running = false; /* Set the flag to false when a signal is received */
+}
+
 int main() {
+
+    signal(SIGINT, handle_signal); /* Handle Ctrl+C */
+    signal(SIGTERM, handle_signal); /* Handle termination signal */
+    
     int server_socket;
     struct sockaddr_in server_addr;
 
@@ -33,24 +45,35 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    // Set up the server address structure
+    /* Set up the server address structure */
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
     server_addr.sin_port = htons(PORT);
 
-    // Bind the socket
+    /* Bind the socket */
     if (bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
         perror("Bind failed");
         close(server_socket);
         exit(EXIT_FAILURE);
     }
 
-    // Listen for incoming connections
+    /* Listen for incoming connections */
     listen(server_socket, 5);
     printf("Server listening on port %d\n", PORT);
 
-    // Accept and handle client connections
+    while (keep_running) {
+        int client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &client_len);
+        if (client_socket < 0) {
+            if (keep_running) { /*Only print error if we are still running */
+                perror("Accept failed");
+            }
+            continue; /* Continue to the next iteration if not shutting down */
+        }
+        handle_client(client_socket);
+    }
+
+    /* Accept and handle client connections */
     handle_connections(server_socket);
 
     close(server_socket);
