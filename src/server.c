@@ -64,7 +64,6 @@ void handle_client(int client_socket) {
 
     // Send the file content to the client
     while ((bytes_read = fread(buffer, 1, sizeof(buffer), file)) > 0) {
-        // Error handling for write
         if (write(client_socket, buffer, bytes_read) < 0) {
             perror("Failed to write to socket");
             fclose(file);
@@ -72,6 +71,7 @@ void handle_client(int client_socket) {
             return;
         }
     }
+
 
     // Check for read errors
     if (ferror(file)) {
@@ -81,7 +81,6 @@ void handle_client(int client_socket) {
     fclose(file);
     close(client_socket);
 }
-
 
 int create_server_socket(int port) {
     int server_socket = socket(AF_INET, SOCK_STREAM, 0);
@@ -103,4 +102,3 @@ void handle_connections(int server_socket) {
         pthread_detach(thread_id); // Detach the thread to allow it to clean up after itself
     }
 }
-
