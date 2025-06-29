@@ -55,9 +55,9 @@ void handle_client(int client_socket) {
 
     // Open the requested file
     FILE *file = fopen(buffer, "r");
-        if (file == NULL) {
+    if (file == NULL) {
         perror("File not found");
-        fprintf(stderr, "Requested file: %s\n", resolved_path);
+        fprintf(stderr, "Requested file: %s\n", buffer);
         close(client_socket);
         return;
     }
@@ -73,7 +73,7 @@ void handle_client(int client_socket) {
         }
     }
 
-    // Error handling for fread
+    // Check for read errors
     if (ferror(file)) {
         perror("Failed to read from file");
     }
@@ -81,6 +81,7 @@ void handle_client(int client_socket) {
     fclose(file);
     close(client_socket);
 }
+
 
 int create_server_socket(int port) {
     int server_socket = socket(AF_INET, SOCK_STREAM, 0);
