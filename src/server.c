@@ -23,6 +23,7 @@
 #include "server.h"
 
 #define BUFFER_SIZE 1024
+#define MAX_FILE_SIZE (10 * 1024 * 1024)
 
 void handle_client(int client_socket) {
     char buffer[BUFFER_SIZE];
@@ -32,6 +33,11 @@ void handle_client(int client_socket) {
     bytes_read = read(client_socket, buffer, sizeof(buffer) - 1);
     if (bytes_read < 0) {
         perror("Failed to read from socket");
+        close(client_socket);
+        return;
+    } else if (bytes_read == 0) {
+        // Client has closed the connection
+        fprintf(stderr, "Client disconnected unexpectedly\n");
         close(client_socket);
         return;
     }
@@ -53,11 +59,27 @@ void handle_client(int client_socket) {
         return;
     }
 
+    char *newline = strchr(buffer, '\n');
+    if (newline) {
+        *newline = '\0'; // Replace newline with null terminator
+    }
+
     // Open the requested file
     FILE *file = fopen(buffer, "r");
     if (file == NULL) {
         perror("File not found");
         fprintf(stderr, "Requested file: %s\n", buffer);
+        close(client_socket);
+        return;
+    }
+
+    fseek(file, 0, SEEK_END);
+    long file_size = ftell(file);
+    fseek(file, 0, SEEK_SET); // Reset file pointer to the beginning
+
+    if (file_size > MAX_FILE_SIZE) {
+        fprintf(stderr, "File size exceeds limit: %s (%ld bytes)\n", buffer, file_size);
+        fclose(file);
         close(client_socket);
         return;
     }
@@ -71,7 +93,6 @@ void handle_client(int client_socket) {
             return;
         }
     }
-
 
     // Check for read errors
     if (ferror(file)) {
