@@ -109,6 +109,15 @@ int create_server_socket(int port) {
         perror("Socket creation failed");
         return -1;
     }
+
+    // Set socket options to allow reuse of the address
+    int opt = 1;
+    if (setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+        perror("Failed to set socket options");
+        close(server_socket);
+        return -1;
+    }
+
     return server_socket;
 }
 
