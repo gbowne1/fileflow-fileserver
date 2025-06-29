@@ -23,7 +23,7 @@
 #include <arpa/inet.h>
 #include "server.h"
 
-#define PORT 8080
+#define DEFAULT_PORT 8080
 
 volatile sig_atomic_t keep_running = true;
 
@@ -31,13 +31,22 @@ void handle_signal(int signal) {
     keep_running = false; /* Set the flag to false when a signal is received */
 }
 
-int main() {
+int main(int argc, char *argv[]) {
 
     signal(SIGINT, handle_signal); /* Handle Ctrl+C */
     signal(SIGTERM, handle_signal); /* Handle termination signal */
     
     int server_socket;
     struct sockaddr_in server_addr;
+    int port = DEFAULT_PORT;
+
+    if (argc > 1) {
+        port = atoi(argv[1]);
+        if (port <= 0 || port > 65535) {
+            fprintf(stderr, "Invalid port number. Using default port %d.\n", DEFAULT_PORT);
+            port = DEFAULT_PORT;
+        }
+    }
 
     // Create socket
     server_socket = create_server_socket(PORT);
@@ -49,7 +58,7 @@ int main() {
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(PORT);
+    server_addr.sin_port = htons(port);
 
     /* Bind the socket */
     if (bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
@@ -60,7 +69,7 @@ int main() {
 
     /* Listen for incoming connections */
     listen(server_socket, 5);
-    printf("Server listening on port %d\n", PORT);
+    printf("Server listening on port %d\n", port);
 
     while (keep_running) {
         int client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &client_len);
