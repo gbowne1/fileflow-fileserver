@@ -23,6 +23,8 @@
 #include <arpa/inet.h>
 #include <sys/select.h>
 #include <sys/resource.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
 #include "server.h"
 
 #define DEFAULT_PORT 8080
@@ -40,6 +42,9 @@ int main(int argc, char *argv[]) {
     
     int server_socket;
     struct sockaddr_in server_addr;
+    struct sockaddr_in client_addr;
+    socklen_t client_len = sizeof(client_addr);
+
     int port = DEFAULT_PORT;
 
     if (argc > 1) {
@@ -51,7 +56,7 @@ int main(int argc, char *argv[]) {
     }
 
     /* Create socket */
-    server_socket = create_server_socket(PORT);
+    server_socket = create_server_socket(port);
     if (server_socket < 0) {
         exit(EXIT_FAILURE);
     }
@@ -83,9 +88,6 @@ int main(int argc, char *argv[]) {
         }
         handle_client(client_socket);
     }
-
-    /* Accept and handle client connections */
-    handle_connections(server_socket);
 
     close(server_socket);
     return 0;

@@ -20,13 +20,17 @@
 #include <unistd.h>
 #include <limits.h>
 #include <fcntl.h>
+#include <pthread.h>
 #include <sys/file.h>
 #include <arpa/inet.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
 
 #include "server.h"
 
 #define BUFFER_SIZE 1024
 #define MAX_FILE_SIZE (10 * 1024 * 1024)
+#define PUBLIC_FOLDER "public"
 
 /* Function to determine the content type based on the file extension */
 const char* get_content_type(const char* filename) {
