@@ -1,8 +1,8 @@
 CC = gcc
-CFLAGS = -Wall -g
-SRC = src/main.c src/server.c
+CFLAGS = -Wall -Werror -Wextra -pedantic -std=c99
+SRC = src/main.c src/server.c src/config.c src/log.c src/pwd.c src/crypt.c 
 OBJ = $(SRC:.c=.o)
-EXEC = file_server
+EXEC = fileflow
 
 all: $(EXEC)
 

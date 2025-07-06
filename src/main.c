@@ -26,6 +26,10 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include "server.h"
+#include "log.h"
+#include "config.h"
+#include "pwd.h"
+#include "crypt.h
 
 #define DEFAULT_PORT 8080
 
@@ -33,6 +37,15 @@ volatile sig_atomic_t keep_running = true;
 
 void handle_signal(int signal) {
     keep_running = false; /* Set the flag to false when a signal is received */
+}
+
+int create_server_socket(int port) {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0) {
+        perror("Socket creation failed");
+        return -1;
+    }
+    return sock;
 }
 
 int main(int argc, char *argv[]) {
