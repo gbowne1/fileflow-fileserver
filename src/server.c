@@ -20,6 +20,7 @@
 #include <unistd.h>
 #include <limits.h>
 #include <fcntl.h>
+#include <stdint.h>
 #include <pthread.h>
 #include <sys/file.h>
 #include <arpa/inet.h>
