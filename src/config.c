@@ -1,7 +1,7 @@
 #include "config.h"
 #include <stdio.h>
 #include <string.h>
-#include <stdlib.h> // For atoi
+#include <stdlib.h>
 
 void load_config(const char *filename, Config *config) {
     FILE *file = fopen(filename, "r");
@@ -20,6 +20,8 @@ void load_config(const char *filename, Config *config) {
                 strncpy(config->log_file, value, sizeof(config->log_file) - 1);
                 config->log_file[sizeof(config->log_file) - 1] = '\0';
             }
+        } else {
+            fprintf(stderr, "Warning: Invalid config line: %s", line);
         }
     }
 

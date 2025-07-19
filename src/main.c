@@ -1,4 +1,3 @@
-
 /*********************************************************************
  * The Open Group Base Specifications Issue 6
  * IEEE Std 1003.1, 2004 Edition
@@ -35,6 +34,7 @@
 #define DEFAULT_PORT 8080
 
 volatile sig_atomic_t keep_running = true;
+int server_socket;
 
 void handle_signal(int signal) {
     keep_running = false; /* Set the flag to false when a signal is received */
@@ -50,14 +50,11 @@ int create_server_socket(int port) {
 }
 
 int main(int argc, char *argv[]) {
-
     signal(SIGINT, handle_signal); /* Handle Ctrl+C */
     signal(SIGTERM, handle_signal); /* Handle termination signal */
     
-    int server_socket;
     struct sockaddr_in server_addr;
-    struct sockaddr_in client_addr;
-    socklen_t client_len = sizeof(client_addr);
+    socklen_t client_len = sizeof(struct sockaddr_in);
 
     int port = DEFAULT_PORT;
 
@@ -95,7 +92,7 @@ int main(int argc, char *argv[]) {
     while (keep_running) {
         int client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &client_len);
         if (client_socket < 0) {
-            if (keep_running) { /*Only print error if we are still running */
+            if (keep_running) { /* Only print error if we are still running */
                 perror("Accept failed");
             }
             continue; /* Continue to the next iteration if not shutting down */
@@ -103,7 +100,8 @@ int main(int argc, char *argv[]) {
         handle_client(client_socket);
     }
 
+    /* Cleanup: close the server socket before exiting */
     close(server_socket);
+    printf("Server shutting down...\n");
     return 0;
 }
-

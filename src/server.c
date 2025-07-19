@@ -26,11 +26,10 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-
 #include "server.h"
 
 #define BUFFER_SIZE 1024
-#define MAX_FILE_SIZE (10 * 1024 * 1024)
+#define MAX_FILE_SIZE (10 * 1024 * 1024) // 10 MB
 #define PUBLIC_FOLDER "public"
 
 /* Function to determine the content type based on the file extension */
@@ -97,14 +96,7 @@ void handle_client(int client_socket) {
         return;
     }
 
-     /* Determine the content type */
-    const char* content_type = get_content_type(buffer);
-    
-    /* Send the content type header (for HTTP-like response) */
-    char header[256];
-    snprintf(header, sizeof(header), "Content-Type: %s\r\n\r\n", content_type);
-    write(client_socket, header, strlen(header));
-
+    /* Check the file size */
     fseek(file, 0, SEEK_END);
     long file_size = ftell(file);
     fseek(file, 0, SEEK_SET); /* Reset file pointer to the beginning */
@@ -116,12 +108,21 @@ void handle_client(int client_socket) {
         return;
     }
 
-    if (flock(fileno(file), LOCK_SH) != 0) {
+    /* Attempt to lock the file for reading */
+    if (flock(fileno(file), LOCK_SH | LOCK_NB) != 0) {
         perror("Failed to lock file");
         fclose(file);
         close(client_socket);
         return;
     }
+
+    /* Determine the content type */
+    const char* content_type = get_content_type(buffer);
+    
+    /* Send the content type header (for HTTP-like response) */
+    char header[256];
+    snprintf(header, sizeof(header), "Content-Type: %s\r\n\r\n", content_type);
+    write(client_socket, header, strlen(header));
 
     /* Send the file content to the client */
     while ((bytes_read = fread(buffer, 1, sizeof(buffer), file)) > 0) {
@@ -139,6 +140,7 @@ void handle_client(int client_socket) {
         perror("Failed to read from file");
     }
 
+    /* Unlock the file and close it */
     flock(fileno(file), LOCK_UN);
     fclose(file);
     close(client_socket);
@@ -167,9 +169,20 @@ void handle_connections(int server_socket) {
     struct sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
 
-    while ((client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &client_len)) >= 0) {
+    while (1) {
+        client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &client_len);
+        if (client_socket < 0) {
+            perror("Accept failed");
+            break; // Break out of the loop on accept failure
+        }
+
         pthread_t thread_id;
-        pthread_create(&thread_id, NULL, handle_client, (void *)(intptr_t)client_socket);
-        pthread_detach(thread_id); /* Detach the thread to allow it to clean up after itself */
+        if (pthread_create(&thread_id, NULL, (void *(*)(void *))handle_client, (void *)(intptr_t)client_socket) != 0) {
+            perror("Failed to create thread");
+            close(client_socket); // Close the client socket if thread creation fails
+        } else {
+            pthread_detach(thread_id); // Detach the thread to allow it to clean up after itself
+        }
     }
 }
+       

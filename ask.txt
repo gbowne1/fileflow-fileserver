@@ -1,0 +1,465 @@
+I'm making a file server in C
+
+src/config.C
+#include "config.h"
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h> // For atoi
+
+void load_config(const char *filename, Config *config) {
+    FILE *file = fopen(filename, "r");
+    if (file == NULL) {
+        perror("Could not open config file");
+        return;
+    }
+
+    char line[256];
+    while (fgets(line, sizeof(line), file)) {
+        char key[128], value[128];
+        if (sscanf(line, "%127[^=]=%127s", key, value) == 2) {
+            if (strcmp(key, "port") == 0) {
+                config->port = atoi(value);
+            } else if (strcmp(key, "log_file") == 0) {
+                strncpy(config->log_file, value, sizeof(config->log_file) - 1);
+                config->log_file[sizeof(config->log_file) - 1] = '\0';
+            }
+        }
+    }
+
+    fclose(file);
+}
+
+src/config.H
+#ifndef CONFIG_H
+#define CONFIG_H
+
+typedef struct {
+    int port;
+    char log_file[256];
+} Config;
+
+void load_config(const char *filename, Config *config);
+
+#endif // CONFIG_H
+
+src/crypt.C
+#include "crypt.h"
+#include <string.h>
+
+void encrypt_data(const char *data, char *encrypted_data) {
+    // Simple encryption logic (for demonstration purposes)
+    for (size_t i = 0; i < strlen(data); i++) {
+        encrypted_data[i] = data[i] ^ 0xFF; // XOR encryption
+    }
+    encrypted_data[strlen(data)] = '\0'; // Null-terminate
+}
+
+void decrypt_data(const char *encrypted_data, char *data) {
+    // Simple decryption logic (for demonstration purposes)
+    for (size_t i = 0; i < strlen(encrypted_data); i++) {
+        data[i] = encrypted_data[i] ^ 0xFF; // XOR decryption
+    }
+    data[strlen(encrypted_data)] = '\0'; // Null-terminate
+}
+
+src/crypt.H
+#ifndef CRYPT_H
+#define CRYPT_H
+
+void encrypt_data(const char *data, char *encrypted_data);
+void decrypt_data(const char *encrypted_data, char *data);
+
+#endif // CRYPT_H
+
+src/log.c
+#include "log.h"
+#include <stdio.h>
+#include <pthread.h>
+#include <time.h>
+
+static FILE *log_file = NULL;
+static pthread_mutex_t log_mutex;
+
+void init_logging(const char *filename) {
+    log_file = fopen(filename, "a");
+    pthread_mutex_init(&log_mutex, NULL);
+}
+
+void log_message(const char *message) {
+    pthread_mutex_lock(&log_mutex);
+    if (log_file) {
+        time_t now = time(NULL);
+        fprintf(log_file, "[%s] %s\n", ctime(&now), message);
+        fflush(log_file); // Ensure the message is written immediately
+    }
+    pthread_mutex_unlock(&log_mutex);
+}
+
+void close_logging() {
+    if (log_file) {
+        fclose(log_file);
+        log_file = NULL;
+    }
+    pthread_mutex_destroy(&log_mutex);
+}
+
+src/log.h
+#ifndef LOG_H
+#define LOG_H
+
+void init_logging(const char *filename);
+void log_message(const char *message);
+void close_logging();
+
+#endif // LOG_H
+
+src/main.c
+
+/*********************************************************************
+ * The Open Group Base Specifications Issue 6
+ * IEEE Std 1003.1, 2004 Edition
+ *
+ *    An XSI-conforming application should ensure that the feature
+ *    test macro _XOPEN_SOURCE is defined with the value 600 before
+ *    inclusion of any header. This is needed to enable the
+ *    functionality described in The _POSIX_C_SOURCE Feature Test
+ *    Macro and in addition to enable the XSI extension.
+ *
+ *********************************************************************/
+#if ! defined (_XOPEN_SOURCE)
+#define _XOPEN_SOURCE 600
+#endif
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <stdint.h>
+#include <signal.h>
+#include <stdbool.h>
+#include <arpa/inet.h>
+#include <sys/select.h>
+#include <sys/resource.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include "server.h"
+#include "log.h"
+#include "config.h"
+#include "pwd.h"
+#include "crypt.h"
+
+#define DEFAULT_PORT 8080
+
+volatile sig_atomic_t keep_running = true;
+
+void handle_signal(int signal) {
+    keep_running = false; /* Set the flag to false when a signal is received */
+}
+
+int create_server_socket(int port) {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0) {
+        perror("Socket creation failed");
+        return -1;
+    }
+    return sock;
+}
+
+int main(int argc, char *argv[]) {
+
+    signal(SIGINT, handle_signal); /* Handle Ctrl+C */
+    signal(SIGTERM, handle_signal); /* Handle termination signal */
+    
+    int server_socket;
+    struct sockaddr_in server_addr;
+    struct sockaddr_in client_addr;
+    socklen_t client_len = sizeof(client_addr);
+
+    int port = DEFAULT_PORT;
+
+    if (argc > 1) {
+        port = atoi(argv[1]);
+        if (port <= 0 || port > 65535) {
+            fprintf(stderr, "Invalid port number. Using default port %d.\n", DEFAULT_PORT);
+            port = DEFAULT_PORT;
+        }
+    }
+
+    /* Create socket */
+    server_socket = create_server_socket(port);
+    if (server_socket < 0) {
+        exit(EXIT_FAILURE);
+    }
+
+    /* Set up the server address structure */
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = INADDR_ANY;
+    server_addr.sin_port = htons(port);
+
+    /* Bind the socket */
+    if (bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+        perror("Bind failed");
+        close(server_socket);
+        exit(EXIT_FAILURE);
+    }
+
+    /* Listen for incoming connections */
+    listen(server_socket, 5);
+    printf("Server listening on port %d\n", port);
+
+    while (keep_running) {
+        int client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &client_len);
+        if (client_socket < 0) {
+            if (keep_running) { /*Only print error if we are still running */
+                perror("Accept failed");
+            }
+            continue; /* Continue to the next iteration if not shutting down */
+        }
+        handle_client(client_socket);
+    }
+
+    close(server_socket);
+    return 0;
+}
+
+src/pwd.C
+#include "pwd.h"
+#include <string.h>
+#include <stdio.h>
+#include <stdbool.h>
+
+#define HASH_SIZE 128
+
+// Simple hash function (not secure, for demonstration only)
+void simple_hash(const char *password, char *hash) {
+    unsigned int i;
+    unsigned char temp = 0;
+
+    for (i = 0; i < strlen(password); i++) {
+        temp ^= password[i]; // Simple XOR operation
+    }
+
+    snprintf(hash, HASH_SIZE, "%02x", temp); // Store the hash as a hex string
+}
+
+// Verify the password by hashing the input and comparing it to the stored hash
+bool verify_password(const char *input_password, const char *stored_hash) {
+    char hash[HASH_SIZE];
+    simple_hash(input_password, hash);
+    return strcmp(hash, stored_hash) == 0;
+}
+
+// Hash the password and store it in the provided hash buffer
+void hash_password(const char *password, char *hash) {
+    simple_hash(password, hash);
+}
+
+src/pwd.H
+#ifndef PWD_H
+#define PWD_H
+
+#include <stdbool.h>
+
+#define HASH_SIZE 128 // Define the size for the hash
+
+// Function prototypes
+void simple_hash(const char *password, char *hash);
+bool verify_password(const char *input_password, const char *stored_hash);
+void hash_password(const char *password, char *hash);
+
+#endif // PWD_H
+
+src/server.C
+
+/*********************************************************************
+ * The Open Group Base Specifications Issue 6
+ * IEEE Std 1003.1, 2004 Edition
+ *
+ *    An XSI-conforming application should ensure that the feature
+ *    test macro _XOPEN_SOURCE is defined with the value 600 before
+ *    inclusion of any header. This is needed to enable the
+ *    functionality described in The _POSIX_C_SOURCE Feature Test
+ *    Macro and in addition to enable the XSI extension.
+ *
+ *********************************************************************/
+#if ! defined (_XOPEN_SOURCE)
+#define _XOPEN_SOURCE 600
+#endif
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <limits.h>
+#include <fcntl.h>
+#include <stdint.h>
+#include <pthread.h>
+#include <sys/file.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+
+#include "server.h"
+
+#define BUFFER_SIZE 1024
+#define MAX_FILE_SIZE (10 * 1024 * 1024)
+#define PUBLIC_FOLDER "public"
+
+/* Function to determine the content type based on the file extension */
+const char* get_content_type(const char* filename) {
+    const char* dot = strrchr(filename, '.');
+    if (!dot || dot == filename) return "application/octet-stream";
+
+    if (strcmp(dot, ".html") == 0) return "text/html";
+    if (strcmp(dot, ".txt") == 0) return "text/plain";
+    if (strcmp(dot, ".jpg") == 0 || strcmp(dot, ".jpeg") == 0) return "image/jpeg";
+    if (strcmp(dot, ".png") == 0) return "image/png";
+    if (strcmp(dot, ".gif") == 0) return "image/gif";
+    if (strcmp(dot, ".pdf") == 0) return "application/pdf";
+    /* Add more types as needed */
+
+    return "application/octet-stream";
+}
+
+void handle_client(int client_socket) {
+    char buffer[BUFFER_SIZE];
+    int bytes_read;
+
+    /* Read the filename from the client */
+    bytes_read = read(client_socket, buffer, sizeof(buffer) - 1);
+    if (bytes_read < 0) {
+        perror("Failed to read from socket");
+        close(client_socket);
+        return;
+    } else if (bytes_read == 0) {
+        /* Client has closed the connection */
+        fprintf(stderr, "Client disconnected unexpectedly\n");
+        close(client_socket);
+        return;
+    }
+    
+    /* Ensure the buffer is null-terminated */
+    buffer[bytes_read] = '\0'; /* Null-terminate the string */
+
+    /* Check if the filename length exceeds the buffer size */
+    if (bytes_read >= BUFFER_SIZE - 1) {
+        fprintf(stderr, "Filename too long: %s\n", buffer);
+        close(client_socket);
+        return;
+    }
+
+    /* Sanitize the filename here because we can */
+    if (strstr(buffer, "..") != NULL) {
+        fprintf(stderr, "Invalid filename requested: %s\n", buffer);
+        close(client_socket);
+        return;
+    }
+
+    char *newline = strchr(buffer, '\n');
+    if (newline) {
+        *newline = '\0'; /* Replace newline with null terminator */
+    }
+
+    /* Open the requested file */
+    FILE *file = fopen(buffer, "r");
+    if (file == NULL) {
+        perror("File not found");
+        fprintf(stderr, "Requested file: %s\n", buffer);
+        close(client_socket);
+        return;
+    }
+
+     /* Determine the content type */
+    const char* content_type = get_content_type(buffer);
+    
+    /* Send the content type header (for HTTP-like response) */
+    char header[256];
+    snprintf(header, sizeof(header), "Content-Type: %s\r\n\r\n", content_type);
+    write(client_socket, header, strlen(header));
+
+    fseek(file, 0, SEEK_END);
+    long file_size = ftell(file);
+    fseek(file, 0, SEEK_SET); /* Reset file pointer to the beginning */
+
+    if (file_size > MAX_FILE_SIZE) {
+        fprintf(stderr, "File size exceeds limit: %s (%ld bytes)\n", buffer, file_size);
+        fclose(file);
+        close(client_socket);
+        return;
+    }
+
+    if (flock(fileno(file), LOCK_SH) != 0) {
+        perror("Failed to lock file");
+        fclose(file);
+        close(client_socket);
+        return;
+    }
+
+    /* Send the file content to the client */
+    while ((bytes_read = fread(buffer, 1, sizeof(buffer), file)) > 0) {
+        if (write(client_socket, buffer, bytes_read) < 0) {
+            perror("Failed to write to socket");
+            flock(fileno(file), LOCK_UN);
+            fclose(file);
+            close(client_socket);
+            return;
+        }
+    }
+
+    /* Check for read errors */
+    if (ferror(file)) {
+        perror("Failed to read from file");
+    }
+
+    flock(fileno(file), LOCK_UN);
+    fclose(file);
+    close(client_socket);
+}
+
+int create_server_socket(int port) {
+    int server_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_socket < 0) {
+        perror("Socket creation failed");
+        return -1;
+    }
+
+    /* Set socket options to allow reuse of the address */
+    int opt = 1;
+    if (setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+        perror("Failed to set socket options");
+        close(server_socket);
+        return -1;
+    }
+
+    return server_socket;
+}
+
+void handle_connections(int server_socket) {
+    int client_socket;
+    struct sockaddr_in client_addr;
+    socklen_t client_len = sizeof(client_addr);
+
+    while ((client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &client_len)) >= 0) {
+        pthread_t thread_id;
+        pthread_create(&thread_id, NULL, handle_client, (void *)(intptr_t)client_socket);
+        pthread_detach(thread_id); /* Detach the thread to allow it to clean up after itself */
+    }
+}
+
+src/server.H
+ 
+#ifndef SERVER_H
+#define SERVER_H
+
+#if !defined(_XOPEN_SOURCE)
+#define _XOPEN_SOURCE 600
+#endif
+
+void handle_client(int client_socket);
+int create_server_socket(int port);
+void handle_connections(int server_socket);
+
+#endif // SERVER_H
+
+this all needs wired together so that it will build/compile properly
