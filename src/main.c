@@ -37,16 +37,8 @@ volatile sig_atomic_t keep_running = true;
 int server_socket;
 
 void handle_signal(int signal) {
-    keep_running = false; /* Set the flag to false when a signal is received */
-}
-
-int create_server_socket(int port) {
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (sock < 0) {
-        perror("Socket creation failed");
-        return -1;
-    }
-    return sock;
+    (void)signal;
+    keep_running = false;
 }
 
 int main(int argc, char *argv[]) {
@@ -54,6 +46,7 @@ int main(int argc, char *argv[]) {
     signal(SIGTERM, handle_signal); /* Handle termination signal */
     
     struct sockaddr_in server_addr;
+    struct sockaddr_in client_addr;
     socklen_t client_len = sizeof(struct sockaddr_in);
 
     int port = DEFAULT_PORT;
