@@ -28,14 +28,14 @@
 #include <netinet/in.h>
 #include "server.h"
 #include "session.h"
-#include "tui.h
+#include "tui.h"
 
 #define BUFFER_SIZE 1024
 #define MAX_FILE_SIZE (10 * 1024 * 1024) // 10 MB
 #define PUBLIC_FOLDER "public"
 
 /* Function to determine the content type based on the file extension */
-extern const char* get_content_type(const char* filename) {
+const char* get_content_type(const char* filename) {
     const char* dot = strrchr(filename, '.');
     if (!dot || dot == filename) return "application/octet-stream";
 
@@ -159,7 +159,7 @@ int create_server_socket(int port) {
         return -1;
     }
 
-    /* Set socket options to allow reuse of the address */
+    // Allow address reuse
     int opt = 1;
     if (setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
         perror("Failed to set socket options");
@@ -167,28 +167,26 @@ int create_server_socket(int port) {
         return -1;
     }
 
+    // Bind to the specified port
+    struct sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = INADDR_ANY; // Accept connections on any IP
+    server_addr.sin_port = htons(port);       // Convert to network byte order
+
+    if (bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+        perror("Bind failed");
+        close(server_socket);
+        return -1;
+    }
+
+    // Start listening
+    if (listen(server_socket, 10) < 0) {
+        perror("Listen failed");
+        close(server_socket);
+        return -1;
+    }
+
     return server_socket;
 }
 
-void handle_connections(int server_socket) {
-    int client_socket;
-    struct sockaddr_in client_addr;
-    socklen_t client_len = sizeof(client_addr);
-
-    while (1) {
-        client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &client_len);
-        if (client_socket < 0) {
-            perror("Accept failed");
-            break; // Break out of the loop on accept failure
-        }
-
-        pthread_t thread_id;
-        if (pthread_create(&thread_id, NULL, (void *(*)(void *))handle_client, (void *)(intptr_t)client_socket) != 0) {
-            perror("Failed to create thread");
-            close(client_socket); // Close the client socket if thread creation fails
-        } else {
-            pthread_detach(thread_id); // Detach the thread to allow it to clean up after itself
-        }
-    }
-}
-       
