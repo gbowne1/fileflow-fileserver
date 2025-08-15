@@ -60,8 +60,9 @@ int main(int argc, char *argv[]) {
     }
 
     /* Create socket */
-    server_socket = create_server_socket(port);
+    int server_socket = create_server_socket(port);
     if (server_socket < 0) {
+        fprintf(stderr, "Failed to start server on port %d\n", port);
         exit(EXIT_FAILURE);
     }
 
