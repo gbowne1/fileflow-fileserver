@@ -44,8 +44,7 @@ void handle_signal(int signal) {
 int main(int argc, char *argv[]) {
     signal(SIGINT, handle_signal); /* Handle Ctrl+C */
     signal(SIGTERM, handle_signal); /* Handle termination signal */
-    
-    struct sockaddr_in server_addr;
+
     struct sockaddr_in client_addr;
     socklen_t client_len = sizeof(struct sockaddr_in);
 
@@ -65,23 +64,6 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Failed to start server on port %d\n", port);
         exit(EXIT_FAILURE);
     }
-
-    /* Set up the server address structure */
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(port);
-
-    /* Bind the socket */
-    if (bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-        perror("Bind failed");
-        close(server_socket);
-        exit(EXIT_FAILURE);
-    }
-
-    /* Listen for incoming connections */
-    listen(server_socket, 5);
-    printf("Server listening on port %d\n", port);
 
     while (keep_running) {
         int client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &client_len);

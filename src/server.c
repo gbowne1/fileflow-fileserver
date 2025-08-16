@@ -187,6 +187,7 @@ int create_server_socket(int port) {
         return -1;
     }
 
+    printf("Server listening on port %d\n", port);
+
     return server_socket;
 }
-

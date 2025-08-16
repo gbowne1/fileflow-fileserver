@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -Wall -Werror -Wextra -pedantic -std=c99 -pthread
-SRC = src/main.c src/server.c src/config.c src/log.c src/pwd.c src/crypt.c 
+SRC = src/main.c src/server.c src/config.c src/log.c src/pwd.c src/crypt.c src/session.c src/tui.c
 OBJ = $(SRC:.c=.o)
 EXEC = fileflow
 
