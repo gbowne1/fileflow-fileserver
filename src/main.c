@@ -30,6 +30,8 @@
 #include "config.h"
 #include "pwd.h"
 #include "crypt.h"
+#include "socket.h"
+#include <pthread.h>
 
 #define DEFAULT_PORT 8080
 
@@ -39,6 +41,15 @@ int server_socket;
 void handle_signal(int signal) {
     (void)signal;
     keep_running = false;
+}
+
+void *client_thread_handler(void *arg) {
+    int client_socket = *((int *)arg);
+    free(arg); // Free the memory allocated in main loop
+
+    handle_client(client_socket); // This is your existing handler
+
+    return NULL;
 }
 
 int main(int argc, char *argv[]) {
@@ -68,12 +79,30 @@ int main(int argc, char *argv[]) {
     while (keep_running) {
         int client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &client_len);
         if (client_socket < 0) {
-            if (keep_running) { /* Only print error if we are still running */
+            if (keep_running) {
                 perror("Accept failed");
             }
-            continue; /* Continue to the next iteration if not shutting down */
+            continue;
         }
-        handle_client(client_socket);
+
+        // Threaded handling
+        pthread_t tid;
+        int *client_fd = malloc(sizeof(int));
+        if (!client_fd) {
+            perror("Failed to allocate memory for client_fd");
+            close(client_socket);
+            continue;
+        }
+        *client_fd = client_socket;
+
+        if (pthread_create(&tid, NULL, client_thread_handler, client_fd) != 0) {
+            perror("Failed to create thread");
+            free(client_fd);
+            close(client_socket);
+            continue;
+        }
+
+        pthread_detach(tid); // We don't need to join later
     }
 
     /* Cleanup: close the server socket before exiting */

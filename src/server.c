@@ -26,9 +26,13 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include "socket.h"
 #include "server.h"
 #include "session.h"
 #include "tui.h"
+#include "user.h"
+#include "pwd.h"
+#include "util.h"
 
 #define BUFFER_SIZE 1024
 #define MAX_FILE_SIZE (10 * 1024 * 1024) // 10 MB
@@ -55,15 +59,99 @@ void handle_client(int client_socket) {
     session_t session;
     init_session(&session, client_socket, dummy_addr);
 
-    tui_render_main_menu(&session);
-
     char input[BUFFER_SIZE];
-    int len = read(client_socket, input, sizeof(input) - 1);
+    int len;
+
+    // Step 1: Authentication Menu
+    tui_clear_screen(&session);
+    tui_send_line(&session, "FILE BBS Server v0.1");
+    tui_send_line(&session, "Built with C, ANSI, and dreams.\n");
+    tui_send_line(&session, "1. Login");
+    tui_send_line(&session, "2. Register");
+    tui_send_line(&session, "3. Quit");
+    tui_send(&session, "\nSelect an option: ");
+
+    len = read(client_socket, input, sizeof(input) - 1);
     if (len <= 0) {
         close_session(&session);
         return;
     }
+    input[len] = '\0';
 
+    if (input[0] == '3') {
+        tui_send_line(&session, "Goodbye!");
+        close_session(&session);
+        return;
+    }
+
+    // Step 2: Get username
+    tui_send_line(&session, "\nEnter username:");
+    tui_send(&session, "> ");
+    len = read(client_socket, input, sizeof(input) - 1);
+    if (len <= 0) {
+        close_session(&session);
+        return;
+    }
+    input[len] = '\0';
+    char *newline = strchr(input, '\n');
+    if (newline) *newline = '\0';
+    char username[MAX_USERNAME_LEN];
+    strncpy(username, input, MAX_USERNAME_LEN);
+    username[MAX_USERNAME_LEN - 1] = '\0';
+
+    // Step 3: Get password
+    tui_send_line(&session, "Enter password:");
+    tui_send(&session, "> ");
+    len = read(client_socket, input, sizeof(input) - 1);
+    if (len <= 0) {
+        close_session(&session);
+        return;
+    }
+    input[len] = '\0';
+    newline = strchr(input, '\n');
+    if (newline) *newline = '\0';
+    char password[MAX_PASSWORD_LEN];
+    strncpy(password, input, MAX_PASSWORD_LEN);
+    password[MAX_PASSWORD_LEN - 1] = '\0';
+
+    // Step 4: Authenticate or register
+    bool authenticated = false;
+    if (input[0] == '1') {
+        authenticated = authenticate_user(username, password);
+        if (!authenticated) {
+            tui_send_line(&session, "Authentication failed.");
+            close_session(&session);
+            return;
+        }
+        tui_send_line(&session, "Login successful.\n");
+    } else if (input[0] == '2') {
+        if (register_user(username, password)) {
+            tui_send_line(&session, "Registration successful. You are now logged in.\n");
+            authenticated = true;
+        } else {
+            tui_send_line(&session, "Username already exists. Try logging in.\n");
+            close_session(&session);
+            return;
+        }
+    } else {
+        tui_send_line(&session, "Invalid selection.");
+        close_session(&session);
+        return;
+    }
+
+    if (!authenticated) {
+        close_session(&session);
+        return;
+    }
+
+    // Step 5: Show main menu
+    tui_render_main_menu(&session);
+
+    len = read(client_socket, input, sizeof(input) - 1);
+    if (len <= 0) {
+        close_session(&session);
+        return;
+    }
     input[len] = '\0';
 
     if (input[0] == '1') {
@@ -141,53 +229,78 @@ void handle_client(int client_socket) {
         fclose(file);
         tui_send_line(&session, "\n\n[Transfer complete]");
 
-    } else if (input[0] == '2') {
+        } else if (input[0] == '2') {
         tui_clear_screen(&session);
-        tui_send_line(&session, "FILE BBS Server v0.1");
-        tui_send_line(&session, "Built with C, ANSI, and dreams.");
-    } else {
+        tui_send_line(&session, "Enter filename to upload:");
+        tui_send(&session, "> ");
+
+        // Read filename
+        int len = read(session.client_socket, input, sizeof(input) - 1);
+        if (len <= 0) {
+            close_session(&session);
+            return;
+        }
+        input[len] = '\0';
+        char *newline = strchr(input, '\n');
+        if (newline) *newline = '\0';
+
+        // Sanitize and get absolute path
+        char full_path[PATH_MAX];
+        if (!is_safe_path(PUBLIC_FOLDER, input, full_path, sizeof(full_path))) {
+            tui_send_line(&session, "Invalid or unsafe filename.");
+            close_session(&session);
+            return;
+        }
+
+        // Prompt for file size
+        tui_send_line(&session, "Enter file size in bytes:");
+        tui_send(&session, "> ");
+        char size_buf[64];
+        len = read(session.client_socket, size_buf, sizeof(size_buf) - 1);
+        if (len <= 0) {
+            close_session(&session);
+            return;
+        }
+        size_buf[len] = '\0';
+        long file_size = strtol(size_buf, NULL, 10);
+        if (file_size <= 0 || file_size > MAX_FILE_SIZE) {
+            tui_send_line(&session, "Invalid or too large file size.");
+            close_session(&session);
+            return;
+        }
+
+        // Open file for writing
+        FILE *file = fopen(full_path, "wb");
+        if (!file) {
+            tui_send_line(&session, "Failed to open file for writing.");
+            close_session(&session);
+            return;
+        }
+
+        // Read and write file contents
+        long bytes_remaining = file_size;
+        while (bytes_remaining > 0) {
+            char buf[1024];
+            int chunk = (bytes_remaining > sizeof(buf)) ? sizeof(buf) : bytes_remaining;
+            int received = read(session.client_socket, buf, chunk);
+            if (received <= 0) {
+                tui_send_line(&session, "Connection lost during upload.");
+                fclose(file);
+                close_session(&session);
+                return;
+            }
+            fwrite(buf, 1, received, file);
+            bytes_remaining -= received;
+        }
+
+        fclose(file);
+        tui_send_line(&session, "[Upload complete]");
+    } else if (input[0] == '3') {
+        tui_clear_screen(&session);
+        tui_send_line(&session, "Exiting...");
+        tui_send_line(&session, "Thank you for using FILE BBS Server!");   
         tui_send_line(&session, "Goodbye!");
     }
 
     close_session(&session);
-}
-
-int create_server_socket(int port) {
-    int server_socket = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_socket < 0) {
-        perror("Socket creation failed");
-        return -1;
-    }
-
-    // Allow address reuse
-    int opt = 1;
-    if (setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
-        perror("Failed to set socket options");
-        close(server_socket);
-        return -1;
-    }
-
-    // Bind to the specified port
-    struct sockaddr_in server_addr;
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = INADDR_ANY; // Accept connections on any IP
-    server_addr.sin_port = htons(port);       // Convert to network byte order
-
-    if (bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-        perror("Bind failed");
-        close(server_socket);
-        return -1;
-    }
-
-    // Start listening
-    if (listen(server_socket, 10) < 0) {
-        perror("Listen failed");
-        close(server_socket);
-        return -1;
-    }
-
-    printf("Server listening on port %d\n", port);
-
-    return server_socket;
 }

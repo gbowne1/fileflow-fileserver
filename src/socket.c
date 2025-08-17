@@ -1,3 +1,4 @@
+// ✅ socket.c (keep this)
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
