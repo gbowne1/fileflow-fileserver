@@ -1,10 +1,4 @@
 #include "util.h"
-#include <stdbool.h>
-#include <limits.h>
-#include <libgen.h>
-#include <sys/stat.h>
-#include <errno.h>
-#include <ctype.h>
 
 bool is_safe_path(const char *base_dir, const char *user_input, char *resolved_path, size_t path_size) {
     char temp_path[PATH_MAX];

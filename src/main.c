@@ -76,6 +76,28 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    // Bind to the specified port
+    struct sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = INADDR_ANY; // Accept connections on any IP
+    server_addr.sin_port = htons(port);       // Convert to network byte order
+
+    if (bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+        perror("Bind failed");
+        close(server_socket);
+        return -1;
+    }
+
+    // Start listening
+    if (listen(server_socket, 10) < 0) {
+        perror("Listen failed");
+        close(server_socket);
+        return -1;
+    }
+
+    printf("Server listening on port %d\n", port);
+
     while (keep_running) {
         int client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &client_len);
         if (client_socket < 0) {

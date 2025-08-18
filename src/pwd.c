@@ -23,7 +23,7 @@ void hash_password_sha256(const char *password, char *output_hex) {
 
 // Verify the password by hashing the input and comparing it to the stored hash
 bool verify_password(const char *input_password, const char *stored_hash) {
-    char hash[HASH_SIZE];
+    char hash[2*HASH_SIZE+1];
     hash_password_sha256(input_password, hash);
     return strcmp(hash, stored_hash) == 0;
 }

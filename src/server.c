@@ -60,6 +60,7 @@ void handle_client(int client_socket) {
     init_session(&session, client_socket, dummy_addr);
 
     char input[BUFFER_SIZE];
+    char option;
     int len;
 
     // Step 1: Authentication Menu
@@ -78,7 +79,9 @@ void handle_client(int client_socket) {
     }
     input[len] = '\0';
 
-    if (input[0] == '3') {
+    option = input[0];
+
+    if (option == '3') {
         tui_send_line(&session, "Goodbye!");
         close_session(&session);
         return;
@@ -116,7 +119,7 @@ void handle_client(int client_socket) {
 
     // Step 4: Authenticate or register
     bool authenticated = false;
-    if (input[0] == '1') {
+    if (option == '1') {
         authenticated = authenticate_user(username, password);
         if (!authenticated) {
             tui_send_line(&session, "Authentication failed.");
@@ -124,7 +127,7 @@ void handle_client(int client_socket) {
             return;
         }
         tui_send_line(&session, "Login successful.\n");
-    } else if (input[0] == '2') {
+    } else if (option == '2') {
         if (register_user(username, password)) {
             tui_send_line(&session, "Registration successful. You are now logged in.\n");
             authenticated = true;
@@ -298,7 +301,7 @@ void handle_client(int client_socket) {
     } else if (input[0] == '3') {
         tui_clear_screen(&session);
         tui_send_line(&session, "Exiting...");
-        tui_send_line(&session, "Thank you for using FILE BBS Server!");   
+        tui_send_line(&session, "Thank you for using FILE BBS Server!");
         tui_send_line(&session, "Goodbye!");
     }
 
